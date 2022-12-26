@@ -1,9 +1,6 @@
 package org.maequise.models.jpa;
 
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.NoResultException;
-import jakarta.persistence.PersistenceException;
-import jakarta.persistence.Query;
+import jakarta.persistence.*;
 import org.hibernate.NonUniqueResultException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,6 +13,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.maequise.models.jpa.MockAbstractJpa.MockEntity;
@@ -89,6 +88,19 @@ class AbstractJpaTest {
     void testUpdateError() {
         when(entityManager.merge(any()))
                 .thenThrow(new PersistenceException("Error during the update"));
+        var entity = new MockEntity();
+        entity.setId(1);
+
+        assertThrows(UpdateException.class, () -> jpaDao.update(entity));
+    }
+
+    @Test
+    void testUpdateErrorAndFlushFails() {
+        when(entityManager.merge(any()))
+                .thenThrow(new PersistenceException("Error during the update"));
+
+        doThrow(new TransactionRequiredException()).when(entityManager).flush();
+
         var entity = new MockEntity();
         entity.setId(1);
 
@@ -240,6 +252,33 @@ class AbstractJpaTest {
     }
 
     @Test
+    void testFindEntitiesWithQueryGenerateError() throws Exception {
+        var entityFound = new ArrayList<MockEntity>();
+
+        entityFound.add(createMockEntity(1, "by found"));
+        entityFound.add(createMockEntity(2, "df"));
+
+        var query = mock(Query.class);
+
+        when(query.getResultList())
+                .thenThrow(new IllegalStateException("Trying to update"));
+
+        when(entityManager.createQuery(anyString()))
+                .thenReturn(query);
+
+        var captorQuery = ArgumentCaptor.forClass(String.class);
+
+        var resultFound = jpaDao.fetchListByQuery("UPDATE e from MockEntity");
+
+        verify(entityManager).createQuery(captorQuery.capture());
+        verify(query).getResultList();
+
+        assertTrue(resultFound.isEmpty());
+
+        assertEquals("UPDATE e from MockEntity", captorQuery.getValue());
+    }
+
+    @Test
     void testFindEntityNoResultWithQuery() throws Exception {
         var query = mock(Query.class);
 
@@ -307,21 +346,305 @@ class AbstractJpaTest {
     }
 
     @Test
-    void testFetchByQueryWithParams() throws Exception {
+    void testFetchByQueryWithNamedOrPositionalParams() throws Exception {
+        var entity = createMockEntity(1, "test");
 
+        var query = mock(TypedQuery.class);
+
+        var captorQueryQuery = ArgumentCaptor.forClass(String.class);
+        var captorQueryTyped = ArgumentCaptor.forClass(Class.class);
+        var captorParamPosition = ArgumentCaptor.forClass(Integer.class);
+        var captorParamValue = ArgumentCaptor.forClass(Object.class);
+
+        when(query.setParameter(anyInt(), any()))
+                .thenReturn(query);
+
+        when(query.getSingleResult())
+                .thenReturn(entity);
+
+        when(entityManager.createQuery(anyString(), any()))
+                .thenReturn(query);
+
+        var resultReturn = jpaDao.fetchByQueryWithParams("select e from MockEntity e where e.anyProp=?1", "test");
+
+        verify(entityManager).createQuery(captorQueryQuery.capture(), captorQueryTyped.capture());
+        verify(query).setParameter(captorParamPosition.capture(), captorParamValue.capture());
+
+        assertNotNull(resultReturn);
+        assertEquals("select e from MockEntity e where e.anyProp=?1", captorQueryQuery.getValue());
+    }
+
+    @Test
+    void testFetchByQueryWithNamedOrPositionalParamsThrowNoResult() throws Exception {
+        var entity = createMockEntity(1, "test");
+
+        var query = mock(TypedQuery.class);
+
+        var captorQueryQuery = ArgumentCaptor.forClass(String.class);
+        var captorQueryTyped = ArgumentCaptor.forClass(Class.class);
+        var captorParamPosition = ArgumentCaptor.forClass(Integer.class);
+        var captorParamValue = ArgumentCaptor.forClass(Object.class);
+
+        when(query.setParameter(anyInt(), any()))
+                .thenReturn(query);
+
+        when(query.getSingleResult())
+                .thenThrow(new NoResultException("No entity found"));
+
+        when(entityManager.createQuery(anyString(), any()))
+                .thenReturn(query);
+
+        var resultReturn = jpaDao.fetchByQueryWithParams("select e from MockEntity e where e.anyProp=?1", "test");
+
+        verify(entityManager).createQuery(captorQueryQuery.capture(), captorQueryTyped.capture());
+        verify(query).setParameter(captorParamPosition.capture(), captorParamValue.capture());
+
+        assertNull(resultReturn);
+        assertEquals("select e from MockEntity e where e.anyProp=?1", captorQueryQuery.getValue());
+    }
+
+    @Test
+    void testFetchByQueryWithNamedOrPositionalParamsThrowNonUniqueResult() throws Exception {
+        var entity = createMockEntity(1, "test");
+
+        var query = mock(TypedQuery.class);
+
+        var captorQueryQuery = ArgumentCaptor.forClass(String.class);
+        var captorQueryTyped = ArgumentCaptor.forClass(Class.class);
+        var captorParamPosition = ArgumentCaptor.forClass(Integer.class);
+        var captorParamValue = ArgumentCaptor.forClass(Object.class);
+
+        when(query.setParameter(anyInt(), any()))
+                .thenReturn(query);
+
+        when(query.getSingleResult())
+                .thenThrow(new jakarta.persistence.NonUniqueResultException("Non unique"));
+
+        when(entityManager.createQuery(anyString(), any()))
+                .thenReturn(query);
+
+        var resultReturn = jpaDao.fetchByQueryWithParams("select e from MockEntity e where e.anyProp=?1", "test");
+
+        verify(entityManager).createQuery(captorQueryQuery.capture(), captorQueryTyped.capture());
+        verify(query).setParameter(captorParamPosition.capture(), captorParamValue.capture());
+
+        assertNull(resultReturn);
+        assertEquals("select e from MockEntity e where e.anyProp=?1", captorQueryQuery.getValue());
+    }
+
+    @Test
+    void testFetchByQueryWithNamedParams() throws Exception {
+        var entity = createMockEntity(1, "test");
+
+        var query = mock(TypedQuery.class);
+
+        var captorQueryQuery = ArgumentCaptor.forClass(String.class);
+        var captorQueryTyped = ArgumentCaptor.forClass(Class.class);
+        var captorParamPosition = ArgumentCaptor.forClass(String.class);
+        var captorParamValue = ArgumentCaptor.forClass(Object.class);
+
+        when(query.setParameter(anyString(), any()))
+                .thenReturn(query);
+
+        when(query.getSingleResult())
+                .thenReturn(entity);
+
+        when(entityManager.createQuery(anyString(), any()))
+                .thenReturn(query);
+
+        var resultReturn = jpaDao.fetchByQueryWithParams("select e from MockEntity e where e.anyProp=:param", Collections.singletonMap("param", "test"));
+
+        verify(entityManager).createQuery(captorQueryQuery.capture(), captorQueryTyped.capture());
+        verify(query).setParameter(captorParamPosition.capture(), captorParamValue.capture());
+
+        assertNotNull(resultReturn);
+        assertEquals("select e from MockEntity e where e.anyProp=:param", captorQueryQuery.getValue());
+        assertEquals(MockEntity.class, captorQueryTyped.getValue());
+    }
+
+    @Test
+    void testFetchByQueryWithNamedParamsNoResult() throws Exception {
+        var entity = createMockEntity(1, "test");
+
+        var query = mock(TypedQuery.class);
+
+        var captorQueryQuery = ArgumentCaptor.forClass(String.class);
+        var captorQueryTyped = ArgumentCaptor.forClass(Class.class);
+        var captorParamPosition = ArgumentCaptor.forClass(String.class);
+        var captorParamValue = ArgumentCaptor.forClass(Object.class);
+
+        when(query.setParameter(anyString(), any()))
+                .thenReturn(query);
+
+        when(query.getSingleResult())
+                .thenThrow(new NoResultException("Nothing found"));
+
+        when(entityManager.createQuery(anyString(), any()))
+                .thenReturn(query);
+
+        var resultReturn = jpaDao.fetchByQueryWithParams("select e from MockEntity e where e.anyProp=:param", Collections.singletonMap("param", "test"));
+
+        verify(entityManager).createQuery(captorQueryQuery.capture(), captorQueryTyped.capture());
+        verify(query).setParameter(captorParamPosition.capture(), captorParamValue.capture());
+
+        assertNull(resultReturn);
+        assertEquals("select e from MockEntity e where e.anyProp=:param", captorQueryQuery.getValue());
+        assertEquals(MockEntity.class, captorQueryTyped.getValue());
+    }
+
+    @Test
+    void testFetchByQueryWithNamedParamsNonUniqueResult() throws Exception {
+        var entity = createMockEntity(1, "test");
+
+        var query = mock(TypedQuery.class);
+
+        var captorQueryQuery = ArgumentCaptor.forClass(String.class);
+        var captorQueryTyped = ArgumentCaptor.forClass(Class.class);
+        var captorParamPosition = ArgumentCaptor.forClass(String.class);
+        var captorParamValue = ArgumentCaptor.forClass(Object.class);
+
+        when(query.setParameter(anyString(), any()))
+                .thenReturn(query);
+
+        when(query.getSingleResult())
+                .thenThrow(new jakarta.persistence.NonUniqueResultException("More than 1 found"));
+
+        when(entityManager.createQuery(anyString(), any()))
+                .thenReturn(query);
+
+        var resultReturn = jpaDao.fetchByQueryWithParams("select e from MockEntity e where e.anyProp=:param", Collections.singletonMap("param", "test"));
+
+        verify(entityManager).createQuery(captorQueryQuery.capture(), captorQueryTyped.capture());
+        verify(query).setParameter(captorParamPosition.capture(), captorParamValue.capture());
+
+        assertNull(resultReturn);
+        assertEquals("select e from MockEntity e where e.anyProp=:param", captorQueryQuery.getValue());
+        assertEquals(MockEntity.class, captorQueryTyped.getValue());
     }
 
     @Test
     void testFetchByQueryListWithParams() throws Exception {
+        var entities = new ArrayList<MockEntity>();
 
+        entities.add(createMockEntity(1, "test"));
+        entities.add(createMockEntity(2, "test2"));
+
+
+        var query = mock(TypedQuery.class);
+
+        var captorQueryQuery = ArgumentCaptor.forClass(String.class);
+        var captorQueryTyped = ArgumentCaptor.forClass(Class.class);
+        var captorParamPosition = ArgumentCaptor.forClass(String.class);
+        var captorParamValue = ArgumentCaptor.forClass(Object.class);
+
+        when(query.setParameter(anyString(), any()))
+                .thenReturn(query);
+
+        when(query.getResultList())
+                .thenReturn(entities);
+
+        when(entityManager.createQuery(anyString(), any()))
+                .thenReturn(query);
+
+        var resultReturn = jpaDao.fetchListByQueryWithParams("select e from MockEntity e where e.anyProp IN (?1)", Collections.singletonMap("param", Stream.of(1,2).toList()));
+
+        verify(entityManager).createQuery(captorQueryQuery.capture(), captorQueryTyped.capture());
+        verify(query).setParameter(captorParamPosition.capture(), captorParamValue.capture());
+
+        assertNotNull(resultReturn);
+        assertEquals("select e from MockEntity e where e.anyProp IN (?1)", captorQueryQuery.getValue());
+        assertEquals(MockEntity.class, captorQueryTyped.getValue());
     }
 
     @Test
-    void testFetchByQueryWithParamsNoResult() throws Exception {
+    void testFetchListByQueryWithParams() throws Exception {
+        var entities = new ArrayList<MockEntity>();
 
-    }@Test
-    void testFetchByQueryListWithParamsNoResults() throws Exception {
+        entities.add(createMockEntity(1, "test"));
+        entities.add(createMockEntity(2, "test2"));
 
+
+        var query = mock(TypedQuery.class);
+
+        var captorQueryQuery = ArgumentCaptor.forClass(String.class);
+        var captorQueryTyped = ArgumentCaptor.forClass(Class.class);
+        var captorParamPosition = ArgumentCaptor.forClass(Integer.class);
+        var captorParamValue = ArgumentCaptor.forClass(Object.class);
+
+        when(query.setParameter(anyInt(), any()))
+                .thenReturn(query);
+
+        when(query.getResultList())
+                .thenReturn(entities);
+
+        when(entityManager.createQuery(anyString(), any()))
+                .thenReturn(query);
+
+        var resultReturn = jpaDao.fetchListByQueryWithParams("select e from MockEntity e where e.anyProp = ?1", 3);
+
+        verify(entityManager).createQuery(captorQueryQuery.capture(), captorQueryTyped.capture());
+        verify(query).setParameter(captorParamPosition.capture(), captorParamValue.capture());
+
+        assertFalse(resultReturn.isEmpty());
+        assertEquals("select e from MockEntity e where e.anyProp = ?1", captorQueryQuery.getValue());
+        assertEquals(2, resultReturn.size());
+        assertEquals(MockEntity.class, captorQueryTyped.getValue());
+    }
+
+    @Test
+    void testFetchByQueryListWithNamedParamsEmptyResults() throws Exception {
+        var query = mock(TypedQuery.class);
+
+        var captorQueryQuery = ArgumentCaptor.forClass(String.class);
+        var captorQueryTyped = ArgumentCaptor.forClass(Class.class);
+        var captorParamPosition = ArgumentCaptor.forClass(String.class);
+        var captorParamValue = ArgumentCaptor.forClass(Object.class);
+
+        when(query.setParameter(anyString(), any()))
+                .thenReturn(query);
+
+        when(query.getResultList())
+                .thenThrow(new IllegalStateException("An error happened"));
+
+        when(entityManager.createQuery(anyString(), any()))
+                .thenReturn(query);
+
+        var resultReturn = jpaDao.fetchListByQueryWithParams("select e from MockEntity e where e.anyProp = :param", Collections.singletonMap("param", 1));
+
+        verify(entityManager).createQuery(captorQueryQuery.capture(), captorQueryTyped.capture());
+        verify(query).setParameter(captorParamPosition.capture(), captorParamValue.capture());
+
+        assertTrue(resultReturn.isEmpty());
+        assertEquals("select e from MockEntity e where e.anyProp = :param", captorQueryQuery.getValue());
+        assertEquals(MockEntity.class, captorQueryTyped.getValue());
+    }
+
+    @Test
+    void testFetchByQueryListWithPositionalParamsEmptyResults() throws Exception {
+        var query = mock(TypedQuery.class);
+
+        var captorQueryQuery = ArgumentCaptor.forClass(String.class);
+        var captorQueryTyped = ArgumentCaptor.forClass(Class.class);
+        var captorParamPosition = ArgumentCaptor.forClass(Integer.class);
+        var captorParamValue = ArgumentCaptor.forClass(Object.class);
+
+        when(query.setParameter(anyInt(), any()))
+                .thenReturn(query);
+
+        when(query.getResultList())
+                .thenThrow(new IllegalStateException("An error happened"));
+
+        when(entityManager.createQuery(anyString(), any()))
+                .thenReturn(query);
+
+        var resultReturn = jpaDao.fetchListByQueryWithParams("select e from MockEntity e where e.anyProp = ?1", 3);
+
+        verify(entityManager).createQuery(captorQueryQuery.capture(), captorQueryTyped.capture());
+        verify(query).setParameter(captorParamPosition.capture(), captorParamValue.capture());
+
+        assertTrue(resultReturn.isEmpty());
+        assertEquals("select e from MockEntity e where e.anyProp = ?1", captorQueryQuery.getValue());
+        assertEquals(MockEntity.class, captorQueryTyped.getValue());
     }
 
     private MockEntity createMockEntity(Integer id, String prop){

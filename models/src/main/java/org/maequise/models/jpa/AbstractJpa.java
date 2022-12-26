@@ -15,6 +15,7 @@ import java.lang.reflect.ParameterizedType;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 @Repository
 @Transactional
@@ -23,7 +24,7 @@ import java.util.List;
 public abstract class AbstractJpa<ID, TYPE> implements JpaDao<ID, TYPE> {
     private EntityManager entityManager;
 
-    private Class<?> clazz = ((ParameterizedType) getClass().getGenericSuperclass()).getActualTypeArguments()[1].getClass();
+    private Class<TYPE> clazz = (Class<TYPE>) ((ParameterizedType) getClass().getGenericSuperclass()).getActualTypeArguments()[1].getClass();
 
     @Override
     public TYPE insert(TYPE entity) throws InsertException {
@@ -41,13 +42,13 @@ public abstract class AbstractJpa<ID, TYPE> implements JpaDao<ID, TYPE> {
     @Override
     public TYPE update(TYPE entity) throws UpdateException {
         try {
-            if(determineId(entity) == null){
+            if (determineId(entity) == null) {
                 return insert(entity);
             }
             return entityManager.merge(entity);
-        } catch (PersistenceException  | InsertException e) {
+        } catch (PersistenceException | InsertException e) {
             throw new UpdateException("Error during the update of the entity", e);
-        } catch(InvocationTargetException | IllegalAccessException e) {
+        } catch (UnknownIdException e) {
             throw new UpdateException("Error during determining ID operation", e);
         } finally {
             try {
@@ -65,7 +66,7 @@ public abstract class AbstractJpa<ID, TYPE> implements JpaDao<ID, TYPE> {
             entityManager.flush();
 
             return true;
-        }catch (PersistenceException e){
+        } catch (PersistenceException e) {
             throw new DeleteException("Error during the delete !", e);
         }
     }
@@ -73,8 +74,8 @@ public abstract class AbstractJpa<ID, TYPE> implements JpaDao<ID, TYPE> {
     @Override
     public TYPE findById(ID id) {
         try {
-            return (TYPE) entityManager.find(clazz, id);
-        } catch (Exception e){
+            return entityManager.find(clazz, id);
+        } catch (Exception e) {
             log.error("Error during the fetching data", e);
             return null;
         }
@@ -85,8 +86,8 @@ public abstract class AbstractJpa<ID, TYPE> implements JpaDao<ID, TYPE> {
         try {
             Query query = entityManager.createQuery(jpql);
             return (TYPE) query.getSingleResult();
-        }catch (Exception e){
-            log.error("Error during the fetch query : " + jpql,e);
+        } catch (Exception e) {
+            log.error("Error during the fetch query : " + jpql, e);
         }
 
         return null;
@@ -97,8 +98,8 @@ public abstract class AbstractJpa<ID, TYPE> implements JpaDao<ID, TYPE> {
         try {
             Query query = entityManager.createQuery(jpql);
 
-            return (List<TYPE>) query.getResultList();
-        }catch (Exception e){
+            return query.getResultList();
+        } catch (Exception e) {
             log.error("");
         }
 
@@ -107,23 +108,109 @@ public abstract class AbstractJpa<ID, TYPE> implements JpaDao<ID, TYPE> {
 
     @Override
     public TYPE fetchByQueryWithParams(String jpql, Object... params) {
+        if (params.length >= 1 && !(params[0] instanceof Map)) {
+            return fetchByQueryWithPositionalParams(jpql, params);
+        } else {
+            return fetchByQueryWithNamedParams(jpql, (Map<String, Object>) params[0]);
+        }
+    }
+
+    @Override
+    public TYPE fetchByQueryWithPositionalParams(String jpql, Object... params) {
+        try {
+            TypedQuery<TYPE> query = entityManager.createQuery(jpql, clazz);
+
+            for (int i = 1; i <= params.length; i++) {
+                query.setParameter(i, params[i - 1]);
+            }
+
+            return query.getSingleResult();
+        } catch (NoResultException e) {
+            log.error("No entry found", e);
+        } catch (NonUniqueResultException e) {
+            log.error("More than 1 result found", e);
+        }
+
+        //default behavior
+        return null;
+    }
+
+    @Override
+    public TYPE fetchByQueryWithNamedParams(String jpql, Map<String, Object> params) {
+        try {
+            var query = entityManager.createQuery(jpql, clazz);
+
+            params.forEach(query::setParameter);
+
+            return query.getSingleResult();
+        } catch (NoResultException e) {
+            log.error("No entry found with the query {} and params", jpql, params);
+            log.error("Error during the fetch", e);
+        } catch (NonUniqueResultException e) {
+            log.error("More than 1 entry found with the query {} and params", jpql, params);
+            log.error("Error during the fetch", e);
+        }
         return null;
     }
 
     @Override
     public List<TYPE> fetchListByQueryWithParams(String jpql, Object... params) {
-        return null;
+        if (params.length >= 1 && !(params[0] instanceof Map)) {
+            return fetchListByQueryWithPositionalParams(jpql, params);
+        } else {
+            return fetchListByQueryWithNamedParams(jpql, (Map<String, Object>) params[0]);
+        }
     }
 
-    private Object determineId(TYPE entity) throws InvocationTargetException, IllegalAccessException {
+    @Override
+    public List<TYPE> fetchListByQueryWithPositionalParams(String jpql, Object... params) {
+        try {
+            var query = entityManager.createQuery(jpql, clazz);
+
+            for (var i = 1; i <= params.length; i++) {
+                query.setParameter(i, params[i - 1]);
+            }
+
+            return query.getResultList();
+        } catch (Exception e) {
+            log.error("Error during the execution of the query {} with params {}", jpql, params);
+            log.error("Error encountered", e);
+        }
+        return Collections.emptyList();
+    }
+
+    @Override
+    public List<TYPE> fetchListByQueryWithNamedParams(String jpql, Map<String, Object> params) {
+        try {
+            var query = entityManager.createQuery(jpql, clazz);
+
+            params.forEach(query::setParameter);
+
+            return query.getResultList();
+        } catch (Exception e) {
+            log.error("Error during the execution of the query {} with params {}", jpql, params);
+            log.error("Error encountered", e);
+        }
+
+        return Collections.emptyList();
+    }
+
+    private Object determineId(TYPE entity) {
         var fields = entity.getClass().getDeclaredFields();
 
         var field = Arrays.stream(fields).filter(f -> f.isAnnotationPresent(Id.class))
-                .findFirst().orElseThrow(() -> new UnknownIdException("You must define and ID !"));
+                .findFirst()
+                .orElseThrow(() -> new UnknownIdException("You must define and ID !"));
 
-        var method = Arrays.stream(entity.getClass().getDeclaredMethods()).filter(m -> m.getName().equalsIgnoreCase("get".concat(field.getName()))
-                && m.getReturnType().equals(field.getType())).findFirst();
+        try {
+            var method = Arrays.stream(entity.getClass().getDeclaredMethods())
+                    .filter(m -> m.getName().equalsIgnoreCase("get".concat(field.getName()))
+                            && m.getReturnType().equals(field.getType()))
+                    .findFirst();
 
-        return method.isPresent() ? method.get().invoke(entity) : new UnknownIdException("No method found !");
+            return method.isPresent() ? method.get().invoke(entity) : new UnknownIdException("No method found !");
+        } catch (InvocationTargetException | IllegalAccessException e) {
+            throw new UnknownIdException("Error during the determining of the ID property");
+        }
     }
 }
