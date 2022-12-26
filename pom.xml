@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.0.0</version>
+        <version>3.0.1</version>
         <relativePath/>
     </parent>
 
@@ -30,8 +30,13 @@
         <java.source>19</java.source>
         <java.target>19</java.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <spring.boot.version>3.0.0</spring.boot.version>
+        <spring.boot.version>3.0.1</spring.boot.version>
         <selenium.version>4.7.1</selenium.version>
+
+        <!-- define global sonarqube properties-->
+        <sonar.exclusions>**/pom.xml</sonar.exclusions>
+        <sonar.sources>src/main</sonar.sources>
+        <sonar.tests>src/test</sonar.tests>
     </properties>
 
     <modules>
@@ -217,17 +222,78 @@
                 </plugin>
             </plugins>
         </pluginManagement>
+
+        <plugins>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.8</version>
+
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <!-- attached to Maven test phase -->
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
     </build>
 
     <profiles>
         <profile>
+            <id>sonar</id>
+            <build>
+                <pluginManagement>
+                    <plugins>
+                        <plugin>
+                            <groupId>com.github.eirslett</groupId>
+                            <artifactId>frontend-maven-plugin</artifactId>
+                            <version>1.12.1</version>
+
+                            <executions>
+                                <execution>
+                                    <id>angular-build</id>
+                                    <phase>compile</phase>
+                                    <goals>
+                                        <goal>yarn</goal>
+                                    </goals>
+
+                                    <configuration>
+                                        <arguments>build</arguments>
+                                    </configuration>
+                                </execution>
+
+                                <execution>
+                                    <id>angular-test</id>
+                                    <phase>test</phase>
+                                    <goals>
+                                        <goal>yarn</goal>
+                                    </goals>
+
+                                    <configuration>
+                                        <arguments>test</arguments>
+                                    </configuration>
+                                </execution>
+                            </executions>
+                        </plugin>
+                    </plugins>
+                </pluginManagement>
+            </build>
+        </profile>
+        <profile>
             <id>dev</id>
 
             <dependencies>
-                <dependency>
-                    <groupId>org.maequise</groupId>
-                    <artifactId>conf</artifactId>
-                </dependency>
                 <dependency>
                     <groupId>com.h2database</groupId>
                     <artifactId>h2</artifactId>

@@ -16,6 +16,9 @@
     <maven.compiler.source>19</maven.compiler.source>
     <maven.compiler.target>19</maven.compiler.target>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <sonar.sources>src</sonar.sources>
+    <sonar.tests></sonar.tests>
+    <sonar.exclusions>src/main.ts,**/*.module.ts,**/*.spec.ts</sonar.exclusions>
   </properties>
 
   <build>

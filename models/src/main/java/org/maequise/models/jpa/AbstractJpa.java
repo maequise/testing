@@ -1,11 +1,9 @@
 package org.maequise.models.jpa;
 
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.Id;
-import jakarta.persistence.PersistenceException;
-import jakarta.persistence.TransactionRequiredException;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.maequise.commons.exceptions.DeleteException;
 import org.maequise.commons.exceptions.InsertException;
 import org.maequise.commons.exceptions.UnknownIdException;
 import org.maequise.commons.exceptions.UpdateException;
@@ -13,7 +11,10 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.ParameterizedType;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 @Repository
 @Transactional
@@ -21,6 +22,8 @@ import java.util.Arrays;
 @AllArgsConstructor
 public abstract class AbstractJpa<ID, TYPE> implements JpaDao<ID, TYPE> {
     private EntityManager entityManager;
+
+    private Class<?> clazz = ((ParameterizedType) getClass().getGenericSuperclass()).getActualTypeArguments()[1].getClass();
 
     @Override
     public TYPE insert(TYPE entity) throws InsertException {
@@ -55,6 +58,62 @@ public abstract class AbstractJpa<ID, TYPE> implements JpaDao<ID, TYPE> {
         }
     }
 
+    @Override
+    public boolean delete(TYPE entity) throws DeleteException {
+        try {
+            entityManager.remove(entity);
+            entityManager.flush();
+
+            return true;
+        }catch (PersistenceException e){
+            throw new DeleteException("Error during the delete !", e);
+        }
+    }
+
+    @Override
+    public TYPE findById(ID id) {
+        try {
+            return (TYPE) entityManager.find(clazz, id);
+        } catch (Exception e){
+            log.error("Error during the fetching data", e);
+            return null;
+        }
+    }
+
+    @Override
+    public TYPE fetchByQuery(String jpql) {
+        try {
+            Query query = entityManager.createQuery(jpql);
+            return (TYPE) query.getSingleResult();
+        }catch (Exception e){
+            log.error("Error during the fetch query : " + jpql,e);
+        }
+
+        return null;
+    }
+
+    @Override
+    public List<TYPE> fetchListByQuery(String jpql) {
+        try {
+            Query query = entityManager.createQuery(jpql);
+
+            return (List<TYPE>) query.getResultList();
+        }catch (Exception e){
+            log.error("");
+        }
+
+        return Collections.emptyList();
+    }
+
+    @Override
+    public TYPE fetchByQueryWithParams(String jpql, Object... params) {
+        return null;
+    }
+
+    @Override
+    public List<TYPE> fetchListByQueryWithParams(String jpql, Object... params) {
+        return null;
+    }
 
     private Object determineId(TYPE entity) throws InvocationTargetException, IllegalAccessException {
         var fields = entity.getClass().getDeclaredFields();

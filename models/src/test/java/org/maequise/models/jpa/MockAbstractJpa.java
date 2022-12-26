@@ -7,7 +7,7 @@ import lombok.Data;
 public class MockAbstractJpa extends AbstractJpa<Integer, MockAbstractJpa.MockEntity> {
 
     public MockAbstractJpa(EntityManager entityManager) {
-        super(entityManager);
+        super(entityManager, MockEntity.class);
     }
 
     @Data
