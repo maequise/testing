@@ -27,13 +27,14 @@
     </developers>
 
     <properties>
-        <maven.compiler.source>19</maven.compiler.source>
-        <maven.compiler.target>19</maven.compiler.target>
+        <java.source>19</java.source>
+        <java.target>19</java.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <spring.boot.version>3.0.0</spring.boot.version>
+        <selenium.version>4.7.1</selenium.version>
     </properties>
 
     <modules>
-
         <module>testing</module>
         <module>front</module>
         <module>services</module>
@@ -43,6 +44,7 @@
 
     <dependencyManagement>
         <dependencies>
+            <!-- Defining all the dependencies of the modules of the project -->
             <dependency>
                 <groupId>org.maequise</groupId>
                 <artifactId>testing</artifactId>
@@ -63,7 +65,213 @@
                 <artifactId>models</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>org.maequise</groupId>
+                <artifactId>front</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!--include selenium lib to automatize front tests with actions -->
+            <dependency>
+                <groupId>org.seleniumhq.selenium</groupId>
+                <artifactId>selenium-java</artifactId>
+                <version>${selenium.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
+    <!--include common libs through all modules -->
+    <dependencies>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- benchmarks -->
+        <dependency>
+            <groupId>org.openjdk.jmh</groupId>
+            <artifactId>jmh-core</artifactId>
+            <version>1.35</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.openjdk.jmh</groupId>
+            <artifactId>jmh-generator-annprocess</artifactId>
+            <version>1.35</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.10.1</version>
+
+                    <configuration>
+                        <source>${java.source}</source>
+                        <target>${java.target}</target>
+                    </configuration>
+                </plugin>
+
+                <plugin>
+                    <groupId>com.github.eirslett</groupId>
+                    <artifactId>frontend-maven-plugin</artifactId>
+                    <version>1.12.1</version>
+
+                    <executions>
+                        <execution>
+                            <id>yarn-install</id>
+                            <phase>compile</phase>
+                            <goals>
+                                <goal>yarn</goal>
+                            </goals>
+
+                            <configuration>
+                                <arguments>build</arguments>
+                            </configuration>
+                        </execution>
+                    </executions>
+                </plugin>
+
+                <!-- add specific configuration to copy the content front into the package app -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-dependency-plugin</artifactId>
+                    <version>3.1.2</version>
+                    <executions>
+                        <execution>
+                            <id>merge</id>
+                            <phase>initialize</phase>
+                            <goals>
+                                <goal>unpack</goal>
+                            </goals>
+                            <configuration>
+                                <artifactItems>
+                                    <artifactItem>
+                                        <groupId>org.maequise</groupId>
+                                        <artifactId>front</artifactId>
+                                        <type>jar</type>
+                                        <overWrite>true</overWrite>
+                                        <outputDirectory>${project.build.directory}/classes/static</outputDirectory>
+                                    </artifactItem>
+                                </artifactItems>
+                            </configuration>
+                        </execution>
+                    </executions>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <configuration>
+                        <excludes>
+                            <exclude>
+                                <groupId>org.projectlombok</groupId>
+                                <artifactId>lombok</artifactId>
+                            </exclude>
+                        </excludes>
+
+                        <classifier>exec</classifier>
+                        <mainClass>org.maequise.controllers.StarterApplication</mainClass>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
+    <profiles>
+        <profile>
+            <id>deployment</id>
+            <build>
+                <pluginManagement>
+                    <plugins>
+                        <plugin>
+                            <groupId>com.github.eirslett</groupId>
+                            <artifactId>frontend-maven-plugin</artifactId>
+                            <version>1.12.1</version>
+
+                            <executions>
+                                <execution>
+                                    <id>install-yarn</id>
+                                    <phase>install</phase>
+                                    <goals>
+                                        <goal>install-node-and-yarn</goal>
+                                    </goals>
+
+                                    <configuration>
+                                        <yarnVersion>v1.22.15</yarnVersion>
+                                        <nodeVersion>v18.12.1</nodeVersion>
+                                    </configuration>
+                                </execution>
+
+                                <execution>
+                                    <id>yarn-install</id>
+                                    <phase>compile</phase>
+                                    <goals>
+                                        <goal>yarn</goal>
+                                    </goals>
+
+                                    <configuration>
+                                        <arguments>install</arguments>
+                                    </configuration>
+                                </execution>
+
+                                <execution>
+                                    <id>angular-build</id>
+                                    <phase>compile</phase>
+                                    <goals>
+                                        <goal>yarn</goal>
+                                    </goals>
+
+                                    <configuration>
+                                        <arguments>build</arguments>
+                                    </configuration>
+                                </execution>
+                            </executions>
+                        </plugin>
+
+                        <!-- customize the clean plugin during the deployment to clean all directories relative to older potentiel deployments -->
+                        <plugin>
+                            <groupId>org.apache.maven.plugins</groupId>
+                            <artifactId>maven-clean-plugin</artifactId>
+                            <version>3.2.0</version>
+
+                            <configuration>
+                                <filesets>
+                                    <fileset>
+                                        <directory>.angular</directory>
+                                        <includes>
+                                            <include>**</include>
+                                        </includes>
+                                    </fileset>
+                                    <fileset>
+                                        <directory>dist</directory>
+                                        <includes>
+                                            <include>**</include>
+                                        </includes>
+                                    </fileset>
+                                    <fileset>
+                                        <directory>static</directory>
+                                        <includes>
+                                            <include>**</include>
+                                        </includes>
+                                    </fileset>
+                                </filesets>
+                            </configuration>
+                        </plugin>
+                    </plugins>
+                </pluginManagement>
+            </build>
+        </profile>
+    </profiles>
 </project>
