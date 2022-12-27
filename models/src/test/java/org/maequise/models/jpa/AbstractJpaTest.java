@@ -676,7 +676,7 @@ class AbstractJpaTest {
 
         verify(entityManager).createQuery(captorQuery.capture());
 
-        assertEquals("delete e from MockEntity e", captorQuery.getValue());
+        assertEquals("delete from MockEntity e", captorQuery.getValue());
     }
 
     private MockEntity createMockEntity(Integer id, String prop){

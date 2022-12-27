@@ -28,7 +28,7 @@ class DatabaseConfigurationTest {
     @Test
     void testDataSource() {
         when(env.getProperty("datasource.url"))
-                .thenReturn("jdbc:h2:mem:test");
+                .thenReturn("jdbc:h2:mem:mock");
 
         when(env.getProperty("datasource.username"))
                 .thenReturn("username");

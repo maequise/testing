@@ -2,18 +2,15 @@ package org.maequise.models.jpa.daos;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.maequise.commons.exceptions.InsertException;
 import org.maequise.models.entities.UserEntity;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
 @ActiveProfiles("test")
-@DirtiesContext(methodMode = DirtiesContext.MethodMode.BEFORE_METHOD)
 class UserDaoTest {
     @Autowired
     private UserDao userDao;
