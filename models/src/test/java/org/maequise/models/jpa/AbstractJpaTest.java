@@ -11,6 +11,7 @@ import org.maequise.commons.exceptions.UpdateException;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -28,7 +29,10 @@ class AbstractJpaTest {
 
     @BeforeEach
     void init() {
-        this.jpaDao = new MockAbstractJpa(entityManager);
+        this.jpaDao = new MockAbstractJpa();
+
+        ReflectionTestUtils.setField(jpaDao, "entityManager", entityManager);
+        ReflectionTestUtils.setField(jpaDao, "clazz", MockEntity.class);
     }
 
     @Test
@@ -134,12 +138,19 @@ class AbstractJpaTest {
         doNothing().when(entityManager).remove(any());
 
         var entity = createMockEntity(1, "ne");
+        when(entityManager.merge(any()))
+                .thenReturn(entity);
+
+        var captor = ArgumentCaptor.forClass(MockEntity.class);
+
         var resultOfDeletion = jpaDao.delete(entity);
 
         verify(entityManager).remove(entity);
+        verify(entityManager).merge(captor.capture());
         verify(entityManager).flush();
 
         assertTrue(resultOfDeletion);
+        assertEquals(entity, captor.getValue());
     }
 
     @Test
@@ -645,6 +656,27 @@ class AbstractJpaTest {
         assertTrue(resultReturn.isEmpty());
         assertEquals("select e from MockEntity e where e.anyProp = ?1", captorQueryQuery.getValue());
         assertEquals(MockEntity.class, captorQueryTyped.getValue());
+    }
+
+    @Test
+    void testDeleteAllEntities() {
+        var query = mock(Query.class);
+
+        when(entityManager.createQuery(anyString()))
+                .thenReturn(query);
+
+        when(query.executeUpdate())
+                .thenReturn(1);
+
+        var captorQuery = ArgumentCaptor.forClass(String.class);
+
+        var totalDeleted = jpaDao.deleteAll();
+
+        assertEquals(1, totalDeleted);
+
+        verify(entityManager).createQuery(captorQuery.capture());
+
+        assertEquals("delete e from MockEntity e", captorQuery.getValue());
     }
 
     private MockEntity createMockEntity(Integer id, String prop){

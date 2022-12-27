@@ -20,11 +20,11 @@ import java.util.Map;
 @Repository
 @Transactional
 @Slf4j
-@AllArgsConstructor
 public abstract class AbstractJpa<ID, TYPE> implements JpaDao<ID, TYPE> {
+    @PersistenceContext
     private EntityManager entityManager;
 
-    private Class<TYPE> clazz = (Class<TYPE>) ((ParameterizedType) getClass().getGenericSuperclass()).getActualTypeArguments()[1].getClass();
+    private Class<TYPE> clazz = (Class<TYPE>) ((ParameterizedType) getClass().getGenericSuperclass()).getActualTypeArguments()[1];
 
     @Override
     public TYPE insert(TYPE entity) throws InsertException {
@@ -62,7 +62,9 @@ public abstract class AbstractJpa<ID, TYPE> implements JpaDao<ID, TYPE> {
     @Override
     public boolean delete(TYPE entity) throws DeleteException {
         try {
-            entityManager.remove(entity);
+            var attachedEntity = entityManager.merge(entity);
+
+            entityManager.remove(attachedEntity);
             entityManager.flush();
 
             return true;
@@ -193,6 +195,23 @@ public abstract class AbstractJpa<ID, TYPE> implements JpaDao<ID, TYPE> {
         }
 
         return Collections.emptyList();
+    }
+
+    @Override
+    public int deleteAll() {
+        try {
+            var query = entityManager.createQuery("delete from " + clazz.getSimpleName() + " e");
+
+            var totalDeleted =  query.executeUpdate();
+
+            entityManager.flush();
+
+            return totalDeleted;
+        }catch (Exception e){
+            log.error("Error during the execution of delete query", e);
+        }
+
+        return 0;
     }
 
     private Object determineId(TYPE entity) {

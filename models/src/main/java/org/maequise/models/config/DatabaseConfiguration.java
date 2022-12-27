@@ -4,6 +4,8 @@ import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import lombok.AllArgsConstructor;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
+import org.springframework.boot.autoconfigure.orm.jpa.HibernateProperties;
+import org.springframework.boot.autoconfigure.orm.jpa.JpaProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -35,5 +37,25 @@ public class DatabaseConfiguration {
         }
 
         return conf;
+    }
+
+    @Bean
+    public JpaProperties jpaProperties() {
+        var jpaProperties = new JpaProperties();
+
+        jpaProperties.setGenerateDdl(true);
+        jpaProperties.setShowSql(true);
+        jpaProperties.setGenerateDdl(true);
+
+        return jpaProperties;
+    }
+
+    @Bean
+    public HibernateProperties hibernateProperties() {
+        var hibernateProperties = new HibernateProperties();
+
+        hibernateProperties.setDdlAuto("create-drop");
+
+        return hibernateProperties;
     }
 }

@@ -31,4 +31,6 @@ public interface JpaDao<ID, TYPE> {
     List<TYPE> fetchListByQueryWithPositionalParams(String jpql, Object... params);
 
     List<TYPE> fetchListByQueryWithNamedParams(String jpql, Map<String, Object> params);
+
+    int deleteAll();
 }
