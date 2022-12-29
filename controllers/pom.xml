@@ -23,6 +23,11 @@
             <artifactId>front</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>org.maequise</groupId>
+            <artifactId>services</artifactId>
+        </dependency>
+
         <!--include the dependencies-->
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -57,7 +57,7 @@
             </dependency>
             <dependency>
                 <groupId>org.maequise</groupId>
-                <artifactId>service</artifactId>
+                <artifactId>services</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
